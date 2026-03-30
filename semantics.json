@@ -1,0 +1,32 @@
+{
+    "specificMap": {
+        "RCC_CR": "Clock Control (时钟控制)",
+        "RCC_CFGR": "Clock Configuration (时钟配置)",
+        "RCC_AHBENR": "AHB Peripheral Clock Enable (AHB外设时钟使能)",
+        "RCC_APB2ENR": "APB2 Peripheral Clock Enable (APB2外设时钟使能)",
+        "RCC_APB1ENR": "APB1 Peripheral Clock Enable (APB1外设时钟使能)",
+        "CRL": "Port Configuration Low (引脚0-7配置)",
+        "CRH": "Port Configuration High (引脚8-15配置)",
+        "IDR": "Input Data (输入数据)",
+        "ODR": "Output Data (输出数据)",
+        "BSRR": "Bit Set/Reset (位置位/复位)",
+        "BRR": "Bit Reset (位复位)",
+        "ADC_SR": "ADC Status (ADC状态)",
+        "ADC_CR1": "ADC Control 1 (ADC控制1)",
+        "ADC_CR2": "ADC Control 2 (ADC控制2)",
+        "ADC_DR": "ADC Data Register (ADC数据结果)"
+    },
+    "commonSuffixMap": {
+        "CR": "Control Register (控制寄存器)",
+        "SR": "Status Register (状态寄存器)",
+        "ENR": "Clock Enable Register (时钟使能寄存器)",
+        "RSTR": "Reset Register (复位寄存器)",
+        "DR": "Data Register (数据寄存器)",
+        "PR": "Pending Register (挂起寄存器)",
+        "IER": "Interrupt Enable Register (中断使能寄存器)",
+        "ISR": "Interrupt Status Register (中断状态寄存器)",
+        "CFGR": "Configuration Register (配置寄存器)",
+        "IMR": "Interrupt Mask Register (中断屏蔽寄存器)",
+        "CCR": "Configuration/Channel Register (配置/通道寄存器)"
+    }
+}

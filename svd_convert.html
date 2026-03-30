@@ -1,0 +1,1063 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCU SVD & SFR/SFD 语义增强转换器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 3px;
+        }
+
+        .tree-node {
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .tree-node:hover {
+            background-color: rgba(59, 130, 246, 0.1);
+        }
+
+        .file-pill {
+            background: #e2e8f0;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            margin-right: 4px;
+            margin-bottom: 4px;
+            display: inline-block;
+            border: 1px solid #cbd5e1;
+        }
+
+        .bit-tag {
+            background: #f0fdf4;
+            color: #166534;
+            border: 1px solid #bbf7d0;
+            padding: 1px 4px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-family: monospace;
+        }
+
+        .addr-column {
+            width: 100px;
+            flex-shrink: 0;
+            font-family: monospace;
+            font-size: 11px;
+            font-weight: 600;
+            color: #991b1b;
+        }
+
+        .offset-column {
+            width: 60px;
+            flex-shrink: 0;
+            font-family: monospace;
+            font-size: 10px;
+            color: #94a3b8;
+        }
+
+        .meaning-tag {
+            font-size: 10px;
+            color: #64748b;
+            font-style: italic;
+            margin-left: 8px;
+        }
+
+        /* 表格样式优化 */
+        .bit-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+            margin-top: 8px;
+            border: 1px solid #e2e8f0;
+            table-layout: fixed;
+        }
+
+        .bit-table th {
+            background: #f8fafc;
+            text-align: left;
+            padding: 8px;
+            border-bottom: 2px solid #e2e8f0;
+            color: #475569;
+            font-weight: 600;
+        }
+
+        .bit-table td {
+            padding: 8px;
+            border-bottom: 1px solid #f1f5f9;
+            vertical-align: top;
+            word-break: break-word;
+        }
+
+        .bit-table tr:nth-child(even) {
+            background: #fbfcfe;
+        }
+
+        .bit-table tr:hover {
+            background: #f1f5f9;
+        }
+
+        /* 搜索框动画 */
+        #search-input:focus {
+            ring: 2px;
+            ring-color: #3b82f6;
+            border-color: transparent;
+        }
+
+        /* 32位域可视化样式 */
+        .bit-visualizer {
+            display: grid;
+            grid-template-columns: repeat(32, 1fr);
+            gap: 1px;
+            background: #e2e8f0;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 8px 0;
+        }
+
+        .bit-cell {
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 9px;
+            font-family: monospace;
+            position: relative;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .bit-cell:hover {
+            transform: scale(1.1);
+            z-index: 10;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .bit-cell.reserved {
+            background: #f1f5f9;
+            color: #94a3b8;
+        }
+
+        .bit-cell.field {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: white;
+            font-weight: 500;
+        }
+
+        .bit-cell.field:nth-child(odd) {
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+        }
+
+        .bit-cell-label {
+            position: absolute;
+            bottom: -20px;
+            font-size: 8px;
+            color: #64748b;
+            white-space: nowrap;
+        }
+
+        .bit-legend {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 8px;
+            font-size: 11px;
+        }
+
+        .bit-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .bit-legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
+
+        /* 统计卡片动画 */
+        .stat-card {
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        /* 导出按钮样式 */
+        .export-btn {
+            transition: all 0.2s;
+        }
+
+        .export-btn:hover {
+            transform: translateY(-1px);
+        }
+
+        /* 拖放区域激活状态 */
+        #drop-zone.drag-active {
+            border-color: #3b82f6;
+            background: rgba(59, 130, 246, 0.05);
+        }
+
+        /* 历史记录样式 */
+        .history-item {
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+
+        .history-item:hover {
+            background: #f1f5f9;
+            border-color: #e2e8f0;
+        }
+
+        .history-item.active {
+            background: #eff6ff;
+            border-color: #3b82f6;
+        }
+
+        .history-item-title {
+            font-weight: 500;
+            font-size: 12px;
+            color: #1e293b;
+            margin-bottom: 2px;
+        }
+
+        .history-item-meta {
+            font-size: 10px;
+            color: #94a3b8;
+        }
+
+        .history-delete {
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .history-item:hover .history-delete {
+            opacity: 1;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-50 min-h-screen text-slate-800 font-sans">
+
+    <div class="max-w-6xl mx-auto p-4 md:p-8">
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl font-bold text-slate-900 mb-2">MCU SVD & SFR/SFD 转换器</h1>
+            <p class="text-slate-600">可视化寄存器位表，内置常用语义</p>
+        </header>
+
+        <!-- 统计信息面板 -->
+        <div id="stats-panel" class="hidden mb-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="stat-card bg-white p-4 rounded-xl shadow-sm border border-slate-200 text-center">
+                <div class="text-2xl font-bold text-blue-600" id="stat-peripherals">0</div>
+                <div class="text-xs text-slate-500 mt-1">外设总数</div>
+            </div>
+            <div class="stat-card bg-white p-4 rounded-xl shadow-sm border border-slate-200 text-center">
+                <div class="text-2xl font-bold text-purple-600" id="stat-registers">0</div>
+                <div class="text-xs text-slate-500 mt-1">寄存器总数</div>
+            </div>
+            <div class="stat-card bg-white p-4 rounded-xl shadow-sm border border-slate-200 text-center">
+                <div class="text-2xl font-bold text-emerald-600" id="stat-fields">0</div>
+                <div class="text-xs text-slate-500 mt-1">位域总数</div>
+            </div>
+            <div class="stat-card bg-white p-4 rounded-xl shadow-sm border border-slate-200 text-center">
+                <div class="text-2xl font-bold text-amber-600" id="stat-meanings">0</div>
+                <div class="text-xs text-slate-500 mt-1">已注解语义</div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- 左侧面板：文件上传 -->
+            <div class="lg:col-span-1 space-y-6">
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z">
+                            </path>
+                        </svg>
+                        文件管理
+                    </h2>
+                    <div id="drop-zone"
+                        class="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center hover:border-blue-500 transition-colors cursor-pointer mb-4">
+                        <input type="file" id="file-input" class="hidden" accept=".svd,.xml,.sfr,.sfd" multiple>
+                        <p class="text-sm text-slate-500 font-medium text-blue-600">点击或拖入 SVD / SFR / SFD 文件</p>
+                    </div>
+                    <div id="file-list" class="flex flex-wrap mb-4"></div>
+                    <div class="space-y-2">
+                        <button id="btn-parse"
+                            class="w-full py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                            disabled>开始深度解析</button>
+                        <button id="btn-clear"
+                            class="w-full py-1 text-slate-500 text-xs hover:text-red-500">清除数据</button>
+                    </div>
+                </div>
+
+                <!-- 导出功能 -->
+                <div id="export-panel" class="hidden bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                            </path>
+                        </svg>
+                        导出数据
+                    </h2>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button id="btn-export-json"
+                            class="export-btn py-2 px-4 bg-emerald-500 text-white rounded-lg text-sm font-medium hover:bg-emerald-600">
+                            导出 JSON
+                        </button>
+                        <button id="btn-export-csv"
+                            class="export-btn py-2 px-4 bg-violet-500 text-white rounded-lg text-sm font-medium hover:bg-violet-600">
+                            导出 CSV
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 历史记录 -->
+                <div id="history-panel" class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-lg font-semibold flex items-center">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z">
+                                </path>
+                            </svg>
+                            历史记录
+                        </h2>
+                        <button id="btn-clear-history" class="text-xs text-slate-400 hover:text-red-500 transition-colors">
+                            清空历史
+                        </button>
+                    </div>
+                    <div id="history-list" class="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar">
+                        <div class="text-center text-slate-400 text-sm py-4">暂无历史记录</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧面板：结果展示 -->
+            <div class="lg:col-span-2 space-y-6">
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col h-[750px]">
+                    <!-- 工具栏：状态与搜索 -->
+                    <div class="p-4 border-b border-slate-200 bg-slate-50 rounded-t-xl space-y-3">
+                        <div class="flex justify-between items-center">
+                            <h2 class="font-semibold text-slate-700">寄存器详情 (表格模式)</h2>
+                            <div class="flex items-center gap-2">
+                                <button id="btn-expand-all"
+                                    class="hidden px-2 py-1 text-xs bg-slate-200 hover:bg-slate-300 rounded transition-colors">
+                                    展开全部
+                                </button>
+                                <button id="btn-collapse-all"
+                                    class="hidden px-2 py-1 text-xs bg-slate-200 hover:bg-slate-300 rounded transition-colors">
+                                    折叠全部
+                                </button>
+                                <span id="status-badge"
+                                    class="px-2 py-1 text-xs font-medium bg-slate-200 text-slate-600 rounded">空闲</span>
+                            </div>
+                        </div>
+                        <!-- 搜索框 -->
+                        <div class="relative">
+                            <input type="text" id="search-input" placeholder="搜索外设或寄存器名称 (例如: RCC 或 CR1)..."
+                                class="w-full pl-10 pr-4 py-2 bg-white border border-slate-300 rounded-lg text-sm transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <svg class="w-4 h-4 absolute left-3 top-2.5 text-slate-400" fill="none"
+                                stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                            </svg>
+                        </div>
+                    </div>
+
+                    <!-- 内容区域 -->
+                    <div id="viewer-container" class="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                        <div id="welcome-msg"
+                            class="h-full flex flex-col items-center justify-center text-slate-400 text-center px-4">
+                            <p>解析完成后，可通过上方搜索框快速筛选</p>
+                        </div>
+                        <div id="tree-root" class="hidden space-y-2"></div>
+                        <div id="no-results" class="hidden py-20 text-center text-slate-400">
+                            <p>未找到匹配的寄存器</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 语义映射表（将动态加载 semantics.json）
+        let SEMANTIC_MAP = {};
+        let COMMON_SUFFIX_MAP = {
+            "CR": "Control Register (控制寄存器)",
+            "SR": "Status Register (状态寄存器)",
+            "ENR": "Clock Enable Register (时钟使能寄存器)",
+            "RSTR": "Reset Register (复位寄存器)",
+            "DR": "Data Register (数据寄存器)",
+            "PR": "Pending Register (挂起寄存器)",
+            "IER": "Interrupt Enable Register (中断使能寄存器)",
+            "ISR": "Interrupt Status Register (中断状态寄存器)",
+            "CFGR": "Configuration Register (配置寄存器)",
+            "IMR": "Interrupt Mask Register (中断屏蔽寄存器)",
+            "CCR": "Configuration/Channel Register (配置/通道寄存器)"
+        };
+
+        // 默认语义映射（作为后备）
+        const DEFAULT_SEMANTIC_MAP = {
+            "RCC_CR": "Clock Control (时钟控制)",
+            "RCC_CFGR": "Clock Configuration (时钟配置)",
+            "RCC_AHBENR": "AHB Peripheral Clock Enable (AHB外设时钟使能)",
+            "RCC_APB2ENR": "APB2 Peripheral Clock Enable (APB2外设时钟使能)",
+            "RCC_APB1ENR": "APB1 Peripheral Clock Enable (APB1外设时钟使能)",
+            "CRL": "Port Configuration Low (引脚0-7配置)",
+            "CRH": "Port Configuration High (引脚8-15配置)",
+            "IDR": "Input Data (输入数据)",
+            "ODR": "Output Data (输出数据)",
+            "BSRR": "Bit Set/Reset (位置位/复位)",
+            "BRR": "Bit Reset (位复位)",
+            "ADC_SR": "ADC Status (ADC状态)",
+            "ADC_CR1": "ADC Control 1 (ADC控制1)",
+            "ADC_CR2": "ADC Control 2 (ADC控制2)",
+            "ADC_DR": "ADC Data Register (ADC数据结果)"
+        };
+
+        // 历史记录管理
+        const HISTORY_KEY = 'svd_convert_history';
+        const MAX_HISTORY = 10;
+
+        function getHistory() {
+            try {
+                const data = localStorage.getItem(HISTORY_KEY);
+                return data ? JSON.parse(data) : [];
+            } catch (e) {
+                return [];
+            }
+        }
+
+        function saveHistory(history) {
+            try {
+                localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+            } catch (e) {
+                console.warn('无法保存历史记录:', e);
+            }
+        }
+
+        function addToHistory(data, fileNames) {
+            let history = getHistory();
+            
+            // 生成唯一ID和时间戳
+            const id = Date.now().toString(36) + Math.random().toString(36).substr(2);
+            const timestamp = new Date().toLocaleString('zh-CN');
+            
+            // 计算统计信息
+            let peripheralCount = data.peripherals.length;
+            let registerCount = 0;
+            data.peripherals.forEach(p => registerCount += p.registers.length);
+            
+            // 创建历史记录项
+            const historyItem = {
+                id,
+                timestamp,
+                title: data.name || 'MCU',
+                files: fileNames,
+                peripheralCount,
+                registerCount,
+                data: data
+            };
+            
+            // 检查是否已存在相同的数据（基于外设和寄存器数量判断）
+            const existingIndex = history.findIndex(h => 
+                h.peripheralCount === peripheralCount && 
+                h.registerCount === registerCount &&
+                h.title === historyItem.title
+            );
+            
+            if (existingIndex !== -1) {
+                // 移除旧记录，添加到顶部
+                history.splice(existingIndex, 1);
+            }
+            
+            // 添加到顶部
+            history.unshift(historyItem);
+            
+            // 限制历史记录数量
+            if (history.length > MAX_HISTORY) {
+                history = history.slice(0, MAX_HISTORY);
+            }
+            
+            saveHistory(history);
+            renderHistoryList();
+        }
+
+        function deleteHistoryItem(id) {
+            let history = getHistory();
+            history = history.filter(h => h.id !== id);
+            saveHistory(history);
+            renderHistoryList();
+        }
+
+        function clearAllHistory() {
+            if (confirm('确定要清空所有历史记录吗？')) {
+                localStorage.removeItem(HISTORY_KEY);
+                renderHistoryList();
+            }
+        }
+
+        function loadFromHistory(historyItem) {
+            finalMergedData = historyItem.data;
+            calculateStats(finalMergedData);
+            renderTree(finalMergedData);
+            
+            welcomeMsg.classList.add('hidden');
+            treeRoot.classList.remove('hidden');
+            statsPanel.classList.remove('hidden');
+            exportPanel.classList.remove('hidden');
+            btnExpandAll.classList.remove('hidden');
+            btnCollapseAll.classList.remove('hidden');
+            setStatus('已加载历史', 'bg-emerald-100 text-emerald-700');
+            
+            // 高亮当前选中项
+            document.querySelectorAll('.history-item').forEach(el => el.classList.remove('active'));
+            document.querySelector(`[data-history-id="${historyItem.id}"]`)?.classList.add('active');
+        }
+        
+        // 暴露到 window 供 onclick 调用
+        window.loadFromHistory = loadFromHistory;
+        window.deleteHistoryItem = deleteHistoryItem;
+        window.getHistory = getHistory;
+
+        function renderHistoryList() {
+            const historyList = document.getElementById('history-list');
+            const history = getHistory();
+            
+            if (history.length === 0) {
+                historyList.innerHTML = '<div class="text-center text-slate-400 text-sm py-4">暂无历史记录</div>';
+                return;
+            }
+            
+            historyList.innerHTML = history.map(item => `
+                <div class="history-item" data-history-id="${item.id}" onclick="loadFromHistory(getHistory().find(h => h.id === '${item.id}'))">
+                    <div class="flex justify-between items-start">
+                        <div class="flex-1 min-w-0">
+                            <div class="history-item-title truncate">${item.title}</div>
+                            <div class="history-item-meta">
+                                ${item.peripheralCount} 外设 · ${item.registerCount} 寄存器
+                            </div>
+                            <div class="history-item-meta">
+                                ${item.files ? item.files.join(', ') : ''}
+                            </div>
+                            <div class="history-item-meta">${item.timestamp}</div>
+                        </div>
+                        <button class="history-delete text-slate-400 hover:text-red-500 ml-2 p-1" 
+                                onclick="event.stopPropagation(); deleteHistoryItem('${item.id}')">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // 加载语义配置
+        async function loadSemantics() {
+            try {
+                const response = await fetch('semantics.json');
+                if (response.ok) {
+                    const data = await response.json();
+                    SEMANTIC_MAP = data.specificMap || {};
+                    COMMON_SUFFIX_MAP = data.commonSuffixMap || COMMON_SUFFIX_MAP;
+                    console.log('语义配置已从 semantics.json 加载');
+                } else {
+                    throw new Error('无法加载 semantics.json');
+                }
+            } catch (e) {
+                console.log('使用默认语义配置');
+                SEMANTIC_MAP = DEFAULT_SEMANTIC_MAP;
+            }
+        }
+
+        function getMeaning(name) {
+            if (!name) return "";
+            const upName = name.toUpperCase();
+
+            // 1. 尝试精确匹配 (例如 RCC_CR)
+            if (SEMANTIC_MAP[upName]) return SEMANTIC_MAP[upName];
+
+            // 2. 尝试去掉外设前缀后匹配 (例如从 GPIOA_CRL 提取 CRL)
+            let shortName = upName.split('_').pop();
+            if (SEMANTIC_MAP[shortName]) return SEMANTIC_MAP[shortName];
+
+            // 3. 尝试通用后缀匹配 (例如 IER, CR, SR)
+            // 先匹配带有数字的后缀 (如 CR1, CR2)
+            let baseName = shortName.replace(/\d+$/, '');
+            if (COMMON_SUFFIX_MAP[baseName]) {
+                return COMMON_SUFFIX_MAP[baseName];
+            }
+
+            // 4. 处理特殊通配符 (如 TIMx)
+            let genericName = upName.replace(/^TIM[0-9]+_/, "TIMx_");
+            if (SEMANTIC_MAP[genericName]) return SEMANTIC_MAP[genericName];
+
+            return "";
+        }
+
+        let filesQueue = [];
+        let finalMergedData = null;
+        let meaningCount = 0;
+
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const fileListContainer = document.getElementById('file-list');
+        const btnParse = document.getElementById('btn-parse');
+        const treeRoot = document.getElementById('tree-root');
+        const welcomeMsg = document.getElementById('welcome-msg');
+        const statusBadge = document.getElementById('status-badge');
+        const searchInput = document.getElementById('search-input');
+        const noResults = document.getElementById('no-results');
+        const statsPanel = document.getElementById('stats-panel');
+        const exportPanel = document.getElementById('export-panel');
+        const btnExpandAll = document.getElementById('btn-expand-all');
+        const btnCollapseAll = document.getElementById('btn-collapse-all');
+
+        function setStatus(text, colorClass) {
+            statusBadge.innerText = text;
+            statusBadge.className = `px-2 py-1 text-xs font-medium rounded ${colorClass}`;
+        }
+
+        // 拖放增强
+        dropZone.onclick = () => fileInput.click();
+        dropZone.ondragover = (e) => {
+            e.preventDefault();
+            dropZone.classList.add('drag-active', 'bg-blue-50');
+        };
+        dropZone.ondragleave = (e) => {
+            dropZone.classList.remove('drag-active', 'bg-blue-50');
+        };
+        dropZone.ondrop = (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-active', 'bg-blue-50');
+            addFiles(e.dataTransfer.files);
+        };
+        fileInput.onchange = (e) => addFiles(e.target.files);
+
+        function addFiles(files) {
+            for (let f of files) { if (!filesQueue.find(item => item.name === f.name)) filesQueue.push(f); }
+            updateFileListUI();
+            btnParse.disabled = filesQueue.length === 0;
+        }
+
+        function updateFileListUI() {
+            fileListContainer.innerHTML = '';
+            filesQueue.forEach((f, index) => {
+                const pill = document.createElement('span');
+                pill.className = 'file-pill';
+                pill.innerHTML = `${f.name} <button class="ml-1 text-slate-400 hover:text-red-500" onclick="removeFile(${index}, event)">×</button>`;
+                fileListContainer.appendChild(pill);
+            });
+        }
+
+        window.removeFile = (index, e) => { e.stopPropagation(); filesQueue.splice(index, 1); updateFileListUI(); btnParse.disabled = filesQueue.length === 0; };
+
+        document.getElementById('btn-clear').onclick = () => {
+            filesQueue = []; updateFileListUI(); btnParse.disabled = true;
+            treeRoot.innerHTML = ''; welcomeMsg.classList.remove('hidden'); treeRoot.classList.add('hidden');
+            searchInput.value = '';
+            statsPanel.classList.add('hidden');
+            exportPanel.classList.add('hidden');
+            btnExpandAll.classList.add('hidden');
+            btnCollapseAll.classList.add('hidden');
+            setStatus('已清除', 'bg-slate-200');
+        };
+
+        // 展开/折叠全部
+        btnExpandAll.onclick = () => {
+            document.querySelectorAll('.peri-content').forEach(el => el.classList.remove('hidden'));
+            document.querySelectorAll('.reg-content').forEach(el => el.classList.remove('hidden'));
+        };
+
+        btnCollapseAll.onclick = () => {
+            document.querySelectorAll('.peri-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.reg-content').forEach(el => el.classList.add('hidden'));
+        };
+
+        searchInput.oninput = () => {
+            const query = searchInput.value.trim().toUpperCase();
+            const peripheralNodes = treeRoot.querySelectorAll('.peri-node');
+            let overallMatch = false;
+
+            peripheralNodes.forEach(pNode => {
+                const periName = pNode.getAttribute('data-name');
+                const registerNodes = pNode.querySelectorAll('.reg-node');
+                let periHasVisibleReg = false;
+
+                registerNodes.forEach(rNode => {
+                    const regName = rNode.getAttribute('data-name');
+                    const isMatch = periName.includes(query) || regName.includes(query);
+                    if (isMatch) {
+                        rNode.classList.remove('hidden');
+                        periHasVisibleReg = true;
+                        overallMatch = true;
+                    } else {
+                        rNode.classList.add('hidden');
+                    }
+                });
+
+                if (periHasVisibleReg) {
+                    pNode.classList.remove('hidden');
+                    const content = pNode.querySelector('.peri-content');
+                    if (query.length > 0) content.classList.remove('hidden');
+                } else {
+                    pNode.classList.add('hidden');
+                }
+            });
+
+            noResults.classList.toggle('hidden', overallMatch || query === '');
+        };
+
+        // 计算统计信息
+        function calculateStats(data) {
+            let peripheralCount = data.peripherals.length;
+            let registerCount = 0;
+            let fieldCount = 0;
+            meaningCount = 0;
+
+            data.peripherals.forEach(peri => {
+                registerCount += peri.registers.length;
+                peri.registers.forEach(reg => {
+                    if (getMeaning(reg.name)) meaningCount++;
+                    fieldCount += reg.fields.length;
+                });
+            });
+
+            document.getElementById('stat-peripherals').textContent = peripheralCount;
+            document.getElementById('stat-registers').textContent = registerCount;
+            document.getElementById('stat-fields').textContent = fieldCount;
+            document.getElementById('stat-meanings').textContent = meaningCount;
+        }
+
+        // 导出功能
+        document.getElementById('btn-export-json').onclick = () => {
+            if (!finalMergedData) return;
+            const jsonStr = JSON.stringify(finalMergedData, null, 2);
+            downloadFile(jsonStr, 'svd_export.json', 'application/json');
+        };
+
+        document.getElementById('btn-export-csv').onclick = () => {
+            if (!finalMergedData) return;
+            let csv = '外设,基址,寄存器,偏移,绝对地址,位域,位范围,描述\n';
+
+            finalMergedData.peripherals.forEach(peri => {
+                const baseAddr = normalizeHex(peri.baseAddress);
+                peri.registers.forEach(reg => {
+                    const offset = normalizeHex(reg.addressOffset);
+                    const absAddr = toHexStr(offset > 0x10000000 ? offset : (baseAddr + offset));
+
+                    if (reg.fields.length === 0) {
+                        csv += `${peri.name},${peri.baseAddress},${reg.name},${reg.addressOffset},${absAddr},,,\n`;
+                    } else {
+                        reg.fields.forEach(f => {
+                            const bStart = parseInt(f.bitOffset);
+                            const bWidth = parseInt(f.bitWidth);
+                            const bitDisplay = bWidth > 1 ? `${bStart + bWidth - 1}:${bStart}` : bStart;
+                            csv += `${peri.name},${peri.baseAddress},${reg.name},${reg.addressOffset},${absAddr},${f.name},${bitDisplay},"${(f.description || '').replace(/"/g, '""')}"\n`;
+                        });
+                    }
+                });
+            });
+
+            downloadFile(csv, 'svd_export.csv', 'text/csv');
+        };
+
+        function downloadFile(content, filename, mimeType) {
+            const blob = new Blob([content], { type: mimeType + ';charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // 32位域可视化
+        function createBitVisualizer(fields) {
+            const container = document.createElement('div');
+            container.className = 'bit-visualizer-wrapper';
+
+            // 图例
+            const legend = document.createElement('div');
+            legend.className = 'bit-legend';
+            legend.innerHTML = `
+                <div class="bit-legend-item">
+                    <div class="bit-legend-color" style="background: linear-gradient(135deg, #3b82f6, #2563eb);"></div>
+                    <span>位域</span>
+                </div>
+                <div class="bit-legend-item">
+                    <div class="bit-legend-color" style="background: #f1f5f9;"></div>
+                    <span>保留</span>
+                </div>
+            `;
+            container.appendChild(legend);
+
+            // 创建 32 位网格
+            const grid = document.createElement('div');
+            grid.className = 'bit-visualizer';
+
+            // 初始化所有位为保留
+            const bits = new Array(32).fill(null);
+
+            // 填充位域信息
+            fields.forEach(f => {
+                const start = parseInt(f.bitOffset);
+                const width = parseInt(f.bitWidth) || 1;
+                for (let i = start; i < start + width && i < 32; i++) {
+                    bits[i] = { name: f.name, start, width };
+                }
+            });
+
+            // 渲染位单元（从高位到低位）
+            for (let i = 31; i >= 0; i--) {
+                const cell = document.createElement('div');
+                cell.className = 'bit-cell';
+
+                if (bits[i]) {
+                    cell.classList.add('field');
+                    // 只在位域的最高位显示名称
+                    if (i === bits[i].start + bits[i].width - 1 || i === 31 || !bits[i + 1] || bits[i + 1].name !== bits[i].name) {
+                        cell.textContent = bits[i].name.length > 6 ? bits[i].name.substring(0, 5) + '..' : bits[i].name;
+                    }
+                    cell.title = `${bits[i].name} (位 ${bits[i].start}:${bits[i].start + bits[i].width - 1})`;
+                } else {
+                    cell.classList.add('reserved');
+                    cell.textContent = i;
+                }
+
+                grid.appendChild(cell);
+            }
+
+            container.appendChild(grid);
+            return container;
+        }
+
+        btnParse.onclick = async () => {
+            setStatus('正在映射寄存器...', 'bg-amber-100 text-amber-700');
+            let svdResults = []; let binaryResults = [];
+            const fileNames = filesQueue.map(f => f.name);
+            const loaders = filesQueue.map(file => {
+                return new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const content = e.target.result;
+                        if (file.name.endsWith('.svd') || file.name.endsWith('.xml')) svdResults.push(parseSvd(content));
+                        else binaryResults.push(scrapeBinaryContent(content));
+                        resolve();
+                    };
+                    reader.readAsText(file);
+                });
+            });
+            await Promise.all(loaders);
+            finalMergedData = deepMerge(svdResults, binaryResults);
+            calculateStats(finalMergedData);
+            renderTree(finalMergedData);
+            
+            // 保存到历史记录
+            addToHistory(finalMergedData, fileNames);
+            
+            welcomeMsg.classList.add('hidden'); treeRoot.classList.remove('hidden');
+            statsPanel.classList.remove('hidden');
+            exportPanel.classList.remove('hidden');
+            btnExpandAll.classList.remove('hidden');
+            btnCollapseAll.classList.remove('hidden');
+            setStatus('解析成功', 'bg-emerald-100 text-emerald-700');
+        };
+
+        function normalizeHex(val) {
+            if (!val) return 0;
+            if (typeof val === 'number') return val;
+            let str = val.toString().trim();
+            if (str.startsWith('0x') || str.startsWith('0X')) return parseInt(str.substring(2), 16);
+            return parseInt(str, 16) || 0;
+        }
+
+        function toHexStr(val) { return '0x' + val.toString(16).toUpperCase().padStart(8, '0'); }
+
+        function deepMerge(svdList, binaryList) {
+            let base = svdList[0] || { name: 'MCU_Memory', peripherals: [] };
+            binaryList.forEach(binData => {
+                binData.peripherals.forEach(binPeri => {
+                    binPeri.registers.forEach(binReg => {
+                        let matched = false; const binRegAbs = normalizeHex(binReg.addressOffset);
+                        for (let p of base.peripherals) {
+                            const baseAddr = normalizeHex(p.baseAddress);
+                            for (let r of p.registers) {
+                                const svdRegAbs = baseAddr + normalizeHex(r.addressOffset);
+                                if (r.name === binReg.name || svdRegAbs === binRegAbs) {
+                                    binReg.fields.forEach(bf => { if (!r.fields.find(f => f.bitOffset == bf.bitOffset)) r.fields.push(bf); });
+                                    matched = true; break;
+                                }
+                            }
+                            if (matched) break;
+                        }
+                        if (!matched) {
+                            let unmapped = base.peripherals.find(p => p.name === 'USER_DEFINED');
+                            if (!unmapped) { unmapped = { name: 'USER_DEFINED', baseAddress: '0x0', registers: [] }; base.peripherals.push(unmapped); }
+                            unmapped.registers.push(binReg);
+                        }
+                    });
+                });
+            });
+            return base;
+        }
+
+        function scrapeBinaryContent(text) {
+            const result = { peripherals: [] }; const periMap = new Map();
+            const lines = text.split(/\r?\n/);
+            let currentRegName = null; let currentAddr = null;
+            const sfdRegPattern = /unsigned\s+int\s+([A-Za-z0-9_]+)\s+__AT\s*\((0x[0-9A-Fa-f]+)\)/;
+            const sfdFieldDescPattern = /<i>\s*\[Bit\s+([\d\.\:]+)\]\s*.*?\)\s*(.*?)<\/i>/;
+            const sfdFieldMapPattern = /<o\.(\d+)\.\.(\d+)>\s*([A-Za-z0-9_]+)/;
+            let tempFields = [];
+
+            lines.forEach((line) => {
+                const regMatch = line.match(sfdRegPattern);
+                if (regMatch) { currentRegName = regMatch[1]; currentAddr = regMatch[2]; return; }
+                const descMatch = line.match(sfdFieldDescPattern);
+                if (descMatch) { tempFields.push({ bitRange: descMatch[1], desc: descMatch[2].trim() }); return; }
+                const mapMatch = line.match(sfdFieldMapPattern);
+                if (mapMatch && currentAddr) {
+                    const startBit = mapMatch[1]; const endBit = mapMatch[2]; const fieldName = mapMatch[3];
+                    const info = tempFields.find(tf => tf.bitRange.includes(startBit)) || { desc: "" };
+                    const baseKey = currentAddr.substring(0, 6) + "0000";
+                    if (!periMap.has(baseKey)) periMap.set(baseKey, { name: `BASE_${baseKey}`, baseAddress: baseKey, registers: [] });
+                    const peri = periMap.get(baseKey);
+                    let reg = peri.registers.find(r => r.addressOffset === currentAddr);
+                    if (!reg) { reg = { name: currentRegName || `REG_${currentAddr}`, addressOffset: currentAddr, fields: [] }; peri.registers.push(reg); }
+                    if (!reg.fields.find(f => f.bitOffset == startBit)) {
+                        reg.fields.push({ name: fieldName, bitOffset: startBit, bitWidth: (parseInt(endBit) - parseInt(startBit) + 1).toString(), description: info.desc || fieldName });
+                    }
+                }
+            });
+            result.peripherals = Array.from(periMap.values());
+            return result;
+        }
+
+        function parseSvd(content) {
+            const parser = new DOMParser(); const xml = parser.parseFromString(content, "text/xml");
+            const device = xml.getElementsByTagName("device")[0];
+            const result = { name: getTagValue(device, "name") || "MCU", peripherals: [] };
+            const peripherals = xml.getElementsByTagName("peripheral");
+            for (let p of peripherals) {
+                let periObj = { name: getTagValue(p, "name"), baseAddress: getTagValue(p, "baseAddress"), registers: [] };
+                const registers = p.getElementsByTagName("register");
+                for (let r of registers) {
+                    let regObj = { name: getTagValue(r, "name"), addressOffset: getTagValue(r, "addressOffset"), fields: [] };
+                    const fields = r.getElementsByTagName("field");
+                    for (let f of fields) {
+                        regObj.fields.push({ name: getTagValue(f, "name"), bitOffset: getTagValue(f, "bitOffset"), bitWidth: getTagValue(f, "bitWidth"), description: getTagValue(f, "description") });
+                    }
+                    periObj.registers.push(regObj);
+                }
+                result.peripherals.push(periObj);
+            }
+            return result;
+        }
+
+        function getTagValue(p, t) { const el = p?.getElementsByTagName(t)[0]; return el ? el.textContent.trim() : ""; }
+
+        function renderTree(data) {
+            treeRoot.innerHTML = '';
+            data.peripherals.forEach(peri => {
+                const pNode = document.createElement('div');
+                pNode.className = 'peri-node border border-slate-200 rounded-lg overflow-hidden bg-white mb-2 shadow-sm';
+                pNode.setAttribute('data-name', peri.name.toUpperCase());
+
+                const periBase = normalizeHex(peri.baseAddress);
+                const pHeader = document.createElement('div');
+                pHeader.className = 'tree-node bg-slate-50 p-3 flex justify-between items-center border-b border-slate-100';
+                pHeader.innerHTML = `<div class="flex items-center"><span class="font-bold text-slate-800">${peri.name}</span> <span class="ml-2 px-2 py-0.5 bg-slate-200 text-[10px] rounded font-mono">${peri.baseAddress}</span><span class="ml-2 text-xs text-slate-400">${peri.registers.length} 个寄存器</span></div>`;
+
+                const pContent = document.createElement('div');
+                pContent.className = 'peri-content hidden p-2 bg-white';
+                pHeader.onclick = () => pContent.classList.toggle('hidden');
+
+                peri.registers.sort((a, b) => normalizeHex(a.addressOffset) - normalizeHex(b.addressOffset)).forEach(reg => {
+                    const regOffset = normalizeHex(reg.addressOffset);
+                    const absAddrVal = regOffset > 0x10000000 ? regOffset : (periBase + regOffset);
+                    const meaning = getMeaning(reg.name);
+
+                    const rNode = document.createElement('div');
+                    rNode.className = 'reg-node ml-2 border-l-2 border-slate-100 pl-3 mb-2';
+                    rNode.setAttribute('data-name', reg.name.toUpperCase());
+
+                    const rHeader = document.createElement('div');
+                    rHeader.className = 'tree-node p-1 text-sm flex items-center';
+                    rHeader.innerHTML = `
+                        <div class="addr-column">${toHexStr(absAddrVal)}</div>
+                        <div class="offset-column">+${reg.addressOffset}</div>
+                        <span class="font-medium text-blue-700">${reg.name}</span>
+                        ${meaning ? `<span class="meaning-tag text-slate-400 font-normal">| ${meaning}</span>` : ''}`;
+
+                    const rContent = document.createElement('div');
+                    rContent.className = 'reg-content hidden mt-2 mb-4 overflow-x-auto rounded-lg border border-slate-100 bg-slate-50/50 p-3';
+
+                    // 添加 32 位域可视化
+                    if (reg.fields.length > 0) {
+                        const visualizer = createBitVisualizer(reg.fields);
+                        rContent.appendChild(visualizer);
+                    }
+
+                    let tableHtml = `<table class="bit-table"><colgroup><col style="width: 80px;"><col style="width: 140px;"><col style="width: 160px;"><col></colgroup><thead><tr><th>位 (Bits)</th><th>名称</th><th>语义全称</th><th>功能详细描述</th></tr></thead><tbody>`;
+
+                    if (reg.fields.length === 0) {
+                        tableHtml += `<tr><td colspan="4" class="text-center text-slate-400 italic py-6">未发现位域信息</td></tr>`;
+                    } else {
+                        reg.fields.sort((a, b) => parseInt(b.bitOffset) - parseInt(a.bitOffset)).forEach(f => {
+                            const bStart = parseInt(f.bitOffset);
+                            const bWidth = parseInt(f.bitWidth);
+                            const bitDisplay = bWidth > 1 ? `${bStart + bWidth - 1}:${bStart}` : bStart;
+                            const bitMeaning = getMeaning(f.name);
+                            tableHtml += `<tr><td><span class="bit-tag">${bitDisplay}</span></td><td class="font-bold text-slate-700">${f.name}</td><td class="text-blue-600 italic font-medium">${bitMeaning || '-'}</td><td class="text-slate-600 leading-relaxed">${f.description || '-'}</td></tr>`;
+                        });
+                    }
+                    tableHtml += `</tbody></table>`;
+
+                    const tableContainer = document.createElement('div');
+                    tableContainer.innerHTML = tableHtml;
+                    rContent.appendChild(tableContainer);
+
+                    rHeader.onclick = (e) => { e.stopPropagation(); rContent.classList.toggle('hidden'); };
+                    rNode.appendChild(rHeader); rNode.appendChild(rContent); pContent.appendChild(rNode);
+                });
+                pNode.appendChild(pHeader); pNode.appendChild(pContent); treeRoot.appendChild(pNode);
+            });
+        }
+
+        // 初始化时加载语义配置
+        loadSemantics();
+        
+        // 清空历史按钮
+        document.getElementById('btn-clear-history').onclick = clearAllHistory;
+        
+        // 初始化渲染历史列表
+        renderHistoryList();
+    </script>
+</body>
+
+</html>
